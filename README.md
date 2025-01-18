@@ -1,36 +1,324 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Steps :
 
-## Getting Started
+npx create-next-app@latest ./
 
-First, run the development server:
+npm install next-auth@beta
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+npx auth secret
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+créer src/lib/auth.ts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+import NextAuth from "next-auth"
+ 
+export const { handlers, signIn, signOut, auth } = NextAuth({
+  providers: [],
+})
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+créer src/app/api/auth/[...nextauth]/route.ts
 
-## Learn More
+import { handlers } from "@/lib/auth" // Referring to the auth.ts we just created
+export const { GET, POST } = handlers
 
-To learn more about Next.js, take a look at the following resources:
+créer middleware.ts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+export { auth as middleware } from "@/lib/auth"
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Deploy on Vercel
+Authentication :
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Github : http://localhost:3000/api/auth/callback/github
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+AUTH_GITHUB_ID=
+AUTH_GITHUB_SECRET=
+
+AUTH_GOOGLE_ID=
+AUTH_GOOGLE_SECRET=
+
+Google : 
+
+https://console.cloud.google.com/apis/credentials?inv=1&invt=AbnMjg&project=shaped-fx-316408
+https://blog.greenroots.info/nextjs-and-next-auth-v5-guide-to-social-logins
+http://localhost:3000/api/auth/callback/google
+
+
+lib/auth.config.ts
+
+import GitHub from "next-auth/providers/github"
+import Google from "next-auth/providers/google"
+import type { NextAuthConfig } from "next-auth"
+ 
+export default { 
+    providers: [
+        GitHub({
+            clientId: process.env.AUTH_GITHUB_ID,
+            clientSecret: process.env.AUTH_GITHUB_SECRET,
+        }),
+        Google({
+            clientId: process.env.AUTH_GOOGLE_ID,
+            clientSecret: process.env.AUTH_GOOGLE_SECRET,
+        })
+    ],
+} satisfies NextAuthConfig
+
+auth.ts :
+
+import NextAuth from "next-auth"
+import authConfig from "./auth.config"
+
+export const { auth, handlers, signIn, signOut } = NextAuth({
+  session: { strategy: "jwt" },
+  ...authConfig,
+})
+
+Créer components/login.tsx
+
+Créer src/app/login/page.tsx
+
+Créer src/app/dashboard/page.tsx
+
+components/login.tsx :
+
+"use client"
+
+import { signIn } from "next-auth/react"
+
+const Login = () => {
+  return (
+    <div>
+        <button onClick={() => signIn("github", { redirectTo: "/dashboard" })}>Sign in with Github</button>
+        <button onClick={() => signIn("google", { redirectTo: "/dashboard" })}>Sign in with Google</button>
+    </div>
+  )
+}
+
+export default Login
+
+dashboard/page.tsx : 
+
+'use client';
+
+import { useSession } from "next-auth/react"
+import { signOut } from "next-auth/react"
+import Image from "next/image" 
+import Link from "next/link"
+
+export default function DashboardPage() {
+
+    const { data: session } = useSession()
+
+    return (
+        <>
+            {session?.user ? (
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        {session?.user?.image ? (
+                            <Image 
+                                src={session.user.image} 
+                                alt="user avatar" 
+                                width={32} 
+                                height={32} 
+                                className="rounded-full ring-2 ring-primary/10 hover:ring-primary/30 transition-all"
+                            />
+                        ) : (
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                {session.user.name?.[0] || session.user.email?.[0]}
+                            </div>
+                        )}
+                        <div className="hidden sm:flex flex-col text-sm">
+                            {session.user.name && (
+                                <span className="font-medium">{session.user.name}</span>
+                            )}
+                            {session.user.email && (
+                                <span className="text-muted-foreground text-xs">{session.user.email}</span>
+                            )}
+                        </div>
+                    </div>
+                    <button onClick={() => signOut()}>
+                        Déconnexion
+                    </button>
+                </div>
+            ) : (
+                <Link href="/login">
+                    <button>Connexion</button>
+                </Link>
+            )}
+        </>
+    )
+}
+
+app/layout.tsx :
+
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import { SessionProvider } from "next-auth/react";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <SessionProvider>
+          {children}
+        </SessionProvider>
+      </body>
+    </html>
+  );
+}
+
+next.config.ts 
+
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  images: {
+    domains: ['lh3.googleusercontent.com', 'avatars.githubusercontent.com'],
+  },
+};
+
+export default nextConfig;
+
+Lier le tout à une base de données 
+
+Prisma :
+
+npm install prisma --save-dev
+npx prisma init --datasource-provider sqlite
+
+https://authjs.dev/getting-started/adapters/prisma
+
+npm install @prisma/client @auth/prisma-adapter
+
+src/lib/prisma.ts : 
+
+import { PrismaClient } from "@prisma/client"
+ 
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
+ 
+export const prisma = globalForPrisma.prisma || new PrismaClient()
+ 
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
+
+src/lib/auth.ts : 
+
+import NextAuth from "next-auth"
+import authConfig from "./auth.config"
+import { PrismaAdapter } from "@auth/prisma-adapter"
+import { PrismaClient } from "@prisma/client"
+
+const prisma = new PrismaClient()
+
+export const { auth, handlers, signIn, signOut } = NextAuth({
+    adapter: PrismaAdapter(prisma),
+    session: { strategy: "jwt" },
+    ...authConfig,
+})
+
+schema.prisma
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+ 
+generator client {
+  provider = "prisma-client-js"
+}
+ 
+model User {
+  id            String          @id @default(cuid())
+  name          String?
+  email         String?         @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  // Optional for WebAuthn support
+  Authenticator Authenticator[]
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+ 
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+ 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+ 
+  @@unique([provider, providerAccountId])
+}
+ 
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+ 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+ 
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+ 
+  @@unique([identifier, token])
+}
+ 
+// Optional for WebAuthn support
+model Authenticator {
+  credentialID         String  @unique
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+ 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+ 
+  @@id([userId, credentialID])
+}
+
+
+npm exec prisma migrate dev
+npx prisma studio
+
+Try to connect, you will now have a database with users and sessions.
